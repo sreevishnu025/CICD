@@ -22,30 +22,47 @@ module.exports = (app) => {
     });
   }
 
-  // Your code here
-    app.on("create", async (context) => {
-    const {owner,repo} = context.repo();
-    const branch = context.payload.ref;
-    const ref_type = context.payload.ref_type;
-    app.log.info(branch+" branch created!!");
-    app.log.info("Creating branch protection rule for "+branch);
-    if(ref_type==="branch"){
-      if(branch.toLowerCase()==="release"){
-        createBranchRule(context,owner,repo,branch);
-        app.log.info("Branch protection rule for "+branch+" branch has been created.");
-      }
-    else if (branch.toLowerCase()==="dev"){
-      createBranchRule(context,owner,repo,branch);
-      app.log.info("Branch protection rule for "+branch+" branch has been created.");
 
-      createBranchRule(context,owner,repo,"main");
-      app.log.info("Branch protection rule for master branch has been created.");
-      }
-    }
+  app.on("installation_repositories.added", async (context) => {
+    const [owner,repo] = context.payload.repositories_added[0].full_name.split("/");
 
-  });
+    const branches = await context.octokit.repos.listBranches({
+      owner,
+      repo
+    })
+    const defaultBranch = branches.data[0].name;
+    // app.log.info(defaultBranch);
+
+    const data = await context.octokit.repos.getCommit({
+      owner,
+      repo,
+      ref: "refs/heads/"+defaultBranch
+    });
+
+    app.log.info(data)
+    const sha = data.data.sha;
+    app.log.info(sha)
+    await context.octokit.git.createRef({
+      owner,
+      repo,
+      ref: "refs/heads/release",
+      sha
+    })
+
+    const branchCreated = await context.octokit.git.createRef({
+      owner,
+      repo,
+      ref: "refs/heads/dev",
+      sha
+    })
+
+    await createBranchRule(context,owner,repo,defaultBranch);
+    await createBranchRule(context,owner,repo,"release");
+    await createBranchRule(context,owner,repo,"dev");
+
+    
+  })
+
 
 };
-
-
 
